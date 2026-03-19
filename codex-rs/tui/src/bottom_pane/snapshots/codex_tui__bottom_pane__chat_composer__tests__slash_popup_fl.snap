@@ -1,0 +1,10 @@
+---
+source: tui/src/bottom_pane/chat_composer.rs
+assertion_line: 6336
+expression: terminal.backend()
+---
+"                                                            "
+"› /fl                                                       "
+"                                                            "
+"  /flex  toggle Flex mode to use lower-cost, higher-latency "
+"         inference                                          "

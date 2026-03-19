@@ -427,3 +427,47 @@ async fn websocket_v2_next_turn_uses_updated_service_tier() -> Result<()> {
     server.shutdown().await;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn websocket_v2_turn_uses_flex_service_tier() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_websocket_server(vec![vec![
+        vec![ev_response_created("warm-1"), ev_completed("warm-1")],
+        vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "flex"),
+            ev_completed("resp-1"),
+        ],
+    ]])
+    .await;
+
+    let mut builder = test_codex().with_config(|config| {
+        config
+            .features
+            .enable(Feature::ResponsesWebsocketsV2)
+            .expect("test config should allow feature update");
+    });
+    let test = builder.build_with_websocket_server(&server).await?;
+
+    let warmup = server.wait_for_request(0, 0).await.body_json();
+    assert_eq!(warmup["type"].as_str(), Some("response.create"));
+    assert_eq!(warmup.get("service_tier"), None);
+
+    test.submit_turn_with_service_tier("hello", Some(ServiceTier::Flex))
+        .await?;
+
+    assert_eq!(server.handshakes().len(), 1);
+    let connection = server.single_connection();
+    assert_eq!(connection.len(), 2);
+    let first_turn = connection
+        .get(1)
+        .expect("missing first turn request")
+        .body_json();
+
+    assert_eq!(first_turn["type"].as_str(), Some("response.create"));
+    assert_eq!(first_turn["service_tier"].as_str(), Some("flex"));
+
+    server.shutdown().await;
+    Ok(())
+}

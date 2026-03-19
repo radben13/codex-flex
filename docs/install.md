@@ -49,6 +49,47 @@ just test
 cargo test --all-features
 ```
 
+### Build from source with Docker Compose profiles
+
+If you do not want to install the pinned Rust toolchain on your host, the repo
+now includes a Compose service named `rust-workspace` that builds against the
+workspace's pinned `1.93.0` toolchain inside Docker.
+
+```bash
+# From the repository root.
+docker compose --profile build run --rm rust-workspace cargo build -p codex-cli
+
+# Launch the locally built binary through cargo.
+docker compose --profile run run --rm rust-workspace \
+  cargo run --bin codex -- --help
+
+# Or run the compiled binary directly after the first build.
+docker compose --profile run run --rm rust-workspace \
+  ./target-docker/debug/codex --help
+
+# Format and test from the same containerized toolchain.
+docker compose --profile build run --rm rust-workspace just fmt
+docker compose --profile test run --rm rust-workspace cargo test -p codex-cli
+```
+
+The Compose workflow keeps Rust caches under `./.docker/` and build artifacts
+under `codex-rs/target-docker/` so repeated runs are faster and do not depend on
+host-level Rust configuration.
+
+For OpenAI experimentation from a local build, the current config surface already
+supports:
+
+```toml
+service_tier = "flex"
+
+[features]
+runtime_metrics = true
+```
+
+`service_tier = "flex"` sends the Responses API `service_tier` field, and
+`runtime_metrics = true` enables the `x-responsesapi-include-timing-metrics`
+header used by the OpenAI timing metrics path.
+
 ## Tracing / verbose logging
 
 Codex is written in Rust, so it honors the `RUST_LOG` environment variable to configure its logging behavior.

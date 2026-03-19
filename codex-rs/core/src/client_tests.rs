@@ -1,14 +1,18 @@
 use super::AuthRequestTelemetryContext;
+use super::FLEX_STREAM_IDLE_TIMEOUT;
 use super::ModelClient;
 use super::PendingUnauthorizedRetry;
 use super::UnauthorizedRecoveryExecution;
+use super::effective_stream_idle_timeout;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
+use codex_protocol::config_types::ServiceTier;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use std::time::Duration;
 
 fn test_model_client(session_source: SessionSource) -> ModelClient {
     let provider = crate::model_provider_info::create_oss_provider_with_base_url(
@@ -114,4 +118,20 @@ fn auth_request_telemetry_context_tracks_attached_auth_and_retry_phase() {
     assert!(auth_context.retry_after_unauthorized);
     assert_eq!(auth_context.recovery_mode, Some("managed"));
     assert_eq!(auth_context.recovery_phase, Some("refresh_token"));
+}
+
+#[test]
+fn flex_service_tier_extends_idle_timeout_to_ten_minutes() {
+    assert_eq!(
+        effective_stream_idle_timeout(Duration::from_secs(5), Some(ServiceTier::Flex)),
+        FLEX_STREAM_IDLE_TIMEOUT
+    );
+    assert_eq!(
+        effective_stream_idle_timeout(Duration::from_secs(700), Some(ServiceTier::Flex)),
+        Duration::from_secs(700)
+    );
+    assert_eq!(
+        effective_stream_idle_timeout(Duration::from_secs(5), None),
+        Duration::from_secs(5)
+    );
 }

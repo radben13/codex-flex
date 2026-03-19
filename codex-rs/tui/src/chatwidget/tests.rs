@@ -8292,6 +8292,36 @@ async fn fast_slash_command_updates_and_persists_local_service_tier() {
 }
 
 #[tokio::test]
+async fn flex_slash_command_updates_and_persists_local_service_tier() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+
+    chat.dispatch_command(SlashCommand::Flex);
+
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            AppEvent::CodexOp(Op::OverrideTurnContext {
+                service_tier: Some(Some(ServiceTier::Flex)),
+                ..
+            })
+        )),
+        "expected flex override app event; events: {events:?}"
+    );
+    assert!(
+        events.iter().any(|event| matches!(
+            event,
+            AppEvent::PersistServiceTierSelection {
+                service_tier: Some(ServiceTier::Flex),
+            }
+        )),
+        "expected flex persistence app event; events: {events:?}"
+    );
+
+    assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
+}
+
+#[tokio::test]
 async fn user_turn_carries_service_tier_after_fast_toggle() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5.3-codex")).await;
     chat.thread_id = Some(ThreadId::new());
@@ -8313,6 +8343,41 @@ async fn user_turn_carries_service_tier_after_fast_toggle() {
         } => {}
         other => panic!("expected Op::UserTurn with fast service tier, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn user_turn_carries_service_tier_after_flex_toggle() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.thread_id = Some(ThreadId::new());
+    set_chatgpt_auth(&mut chat);
+
+    chat.dispatch_command(SlashCommand::Flex);
+
+    let _events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+
+    chat.bottom_pane
+        .set_composer_text("hello".to_string(), Vec::new(), Vec::new());
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+
+    match next_submit_op(&mut op_rx) {
+        Op::UserTurn {
+            service_tier: Some(Some(ServiceTier::Flex)),
+            ..
+        } => {}
+        other => panic!("expected Op::UserTurn with flex service tier, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn flex_slash_command_with_status_arg_reports_state() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.set_service_tier(Some(ServiceTier::Flex));
+
+    chat.dispatch_command_with_args(SlashCommand::Flex, "status".to_string(), Vec::new());
+
+    let cells = drain_insert_history(&mut rx);
+    let rendered = lines_to_single_string(cells.last().expect("status history cell"));
+    assert!(rendered.contains("Flex mode is on."));
 }
 
 #[tokio::test]

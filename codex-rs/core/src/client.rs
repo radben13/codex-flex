@@ -121,6 +121,36 @@ const MEMORIES_SUMMARIZE_ENDPOINT: &str = "/memories/trace_summarize";
 #[cfg(test)]
 pub(crate) const WEBSOCKET_CONNECT_TIMEOUT: Duration =
     Duration::from_millis(crate::model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS);
+const FLEX_STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
+
+fn effective_stream_idle_timeout(
+    idle_timeout: Duration,
+    service_tier: Option<ServiceTier>,
+) -> Duration {
+    if matches!(service_tier, Some(ServiceTier::Flex)) {
+        idle_timeout.max(FLEX_STREAM_IDLE_TIMEOUT)
+    } else {
+        idle_timeout
+    }
+}
+
+fn provider_for_turn(
+    mut provider: codex_api::Provider,
+    service_tier: Option<ServiceTier>,
+) -> codex_api::Provider {
+    provider.stream_idle_timeout =
+        effective_stream_idle_timeout(provider.stream_idle_timeout, service_tier);
+    provider
+}
+
+pub fn ws_version_from_features(config: &Config) -> bool {
+    config
+        .features
+        .enabled(crate::features::Feature::ResponsesWebsockets)
+        || config
+            .features
+            .enabled(crate::features::Feature::ResponsesWebsocketsV2)
+}
 
 /// Session-scoped state shared by all [`ModelClient`] clones.
 ///
@@ -1006,7 +1036,10 @@ impl ModelClientSession {
             warn!(path, "Streaming from fixture");
             let stream = codex_api::stream_from_fixture(
                 path,
-                self.client.state.provider.stream_idle_timeout(),
+                effective_stream_idle_timeout(
+                    self.client.state.provider.stream_idle_timeout(),
+                    service_tier,
+                ),
             )
             .map_err(map_api_error)?;
             let (stream, _last_request_rx) = map_response_stream(stream, session_telemetry.clone());
@@ -1043,12 +1076,9 @@ impl ModelClientSession {
                 summary,
                 service_tier,
             )?;
-            let client = ApiResponsesClient::new(
-                transport,
-                client_setup.api_provider,
-                client_setup.api_auth,
-            )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            let provider = provider_for_turn(client_setup.api_provider, service_tier);
+            let client = ApiResponsesClient::new(transport, provider, client_setup.api_auth)
+                .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
             let stream_result = client.stream_request(request, options).await;
 
             match stream_result {
@@ -1132,10 +1162,11 @@ impl ModelClientSession {
                 ws_payload.generate = Some(false);
             }
 
+            let provider = provider_for_turn(client_setup.api_provider, service_tier);
             match self
                 .websocket_connection(WebsocketConnectParams {
                     session_telemetry,
-                    api_provider: client_setup.api_provider,
+                    provider,
                     api_auth: client_setup.api_auth,
                     turn_metadata_header,
                     options: &options,

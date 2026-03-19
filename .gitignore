@@ -41,6 +41,9 @@ AGENTS.override.md
 .nyc_output/
 .jest/
 *.tsbuildinfo
+/.docker/cargo/
+/.docker/home/
+/.docker/rustup/
 
 # logs
 *.log
@@ -90,4 +93,3 @@ CHANGELOG.ignore.md
 # Python bytecode files
 __pycache__/
 *.pyc
-

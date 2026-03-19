@@ -1,0 +1,19 @@
+services:
+  rust-workspace:
+    profiles: ["build", "run", "test"]
+    build:
+      context: .
+      dockerfile: .docker/rust-workspace/Dockerfile
+    working_dir: /workspace/codex-rs
+    user: "${UID:-1000}:${GID:-1000}"
+    stdin_open: true
+    tty: true
+    environment:
+      HOME: /workspace/.docker/home
+      CARGO_HOME: /workspace/.docker/cargo
+      RUSTUP_HOME: /workspace/.docker/rustup
+      CARGO_TARGET_DIR: /workspace/codex-rs/target-docker
+      CODEX_HOME: /workspace/.docker/home/.codex
+    volumes:
+      - .:/workspace
+    command: ["bash"]
