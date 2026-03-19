@@ -94,6 +94,7 @@ use crate::auth::RefreshTokenError;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
+use crate::config::Config;
 use crate::default_client::build_reqwest_client;
 use crate::error::CodexErr;
 use crate::error::Result;
@@ -1166,7 +1167,7 @@ impl ModelClientSession {
             match self
                 .websocket_connection(WebsocketConnectParams {
                     session_telemetry,
-                    provider,
+                    api_provider: provider,
                     api_auth: client_setup.api_auth,
                     turn_metadata_header,
                     options: &options,
