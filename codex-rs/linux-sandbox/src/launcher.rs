@@ -4,6 +4,7 @@ use std::os::fd::AsRawFd;
 use std::os::raw::c_char;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+use std::process::Command;
 
 use crate::vendored_bwrap::exec_vendored_bwrap;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -24,7 +25,8 @@ pub(crate) fn exec_bwrap(argv: Vec<String>, preserved_files: Vec<File>) -> ! {
 }
 
 fn preferred_bwrap_launcher() -> BubblewrapLauncher {
-    if !Path::new(SYSTEM_BWRAP_PATH).is_file() {
+    let system_bwrap_path = Path::new(SYSTEM_BWRAP_PATH);
+    if !system_bwrap_path.is_file() || !system_bwrap_supports_argv0(system_bwrap_path) {
         return BubblewrapLauncher::Vendored;
     }
 
@@ -33,6 +35,20 @@ fn preferred_bwrap_launcher() -> BubblewrapLauncher {
         Err(err) => panic!("failed to normalize system bubblewrap path {SYSTEM_BWRAP_PATH}: {err}"),
     };
     BubblewrapLauncher::System(system_bwrap_path)
+}
+
+fn system_bwrap_supports_argv0(program: &Path) -> bool {
+    let output = match Command::new(program).arg("--help").output() {
+        Ok(output) => output,
+        Err(_) => return false,
+    };
+    bubblewrap_help_mentions_argv0(&output.stdout) || bubblewrap_help_mentions_argv0(&output.stderr)
+}
+
+fn bubblewrap_help_mentions_argv0(output: &[u8]) -> bool {
+    std::str::from_utf8(output)
+        .map(|text| text.lines().any(|line| line.contains("--argv0")))
+        .unwrap_or(false)
 }
 
 fn exec_system_bwrap(
@@ -101,6 +117,7 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
+    use tempfile::TempDir;
 
     #[test]
     fn preserved_files_are_made_inheritable_for_system_exec() {
@@ -110,6 +127,33 @@ mod tests {
         make_files_inheritable(std::slice::from_ref(file.as_file()));
 
         assert_eq!(fd_flags(file.as_file().as_raw_fd()) & libc::FD_CLOEXEC, 0);
+    }
+
+    #[test]
+    fn help_output_detection_requires_argv0_flag() {
+        assert!(bubblewrap_help_mentions_argv0(b"  --argv0 VALUE\n"));
+        assert!(!bubblewrap_help_mentions_argv0(b"  --help\n"));
+    }
+
+    #[test]
+    fn system_bwrap_support_detection_requires_argv0_in_help() {
+        let dir = TempDir::new().expect("temp dir");
+        let script_path = dir.path().join("bwrap");
+        std::fs::write(
+            &script_path,
+            "#!/bin/sh\nprintf '%s\n' 'usage: bwrap' '    --help'\n",
+        )
+        .expect("write fake bwrap");
+        let metadata = std::fs::metadata(&script_path).expect("metadata");
+        let mut permissions = metadata.permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            permissions.set_mode(0o755);
+        }
+        std::fs::set_permissions(&script_path, permissions).expect("chmod fake bwrap");
+
+        assert_eq!(system_bwrap_supports_argv0(&script_path), false);
     }
 
     fn set_cloexec(fd: libc::c_int) {

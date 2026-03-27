@@ -8,16 +8,17 @@ This crate is responsible for producing:
   - this should also be true of the `codex` multitool CLI
 
 On Linux, the bubblewrap pipeline prefers the system `/usr/bin/bwrap` whenever
-it is available. If `/usr/bin/bwrap` is missing, the helper still falls back to
-the vendored bubblewrap path compiled into this binary.
+it is available and supports the required `--argv0` flag. If `/usr/bin/bwrap`
+is missing or too old for that flag, the helper falls back to the vendored
+bubblewrap path compiled into this binary.
 Codex also surfaces a startup warning when `/usr/bin/bwrap` is missing so users
 know it is falling back to the vendored helper.
 
 **Current Behavior**
 - Legacy `SandboxPolicy` / `sandbox_mode` configs remain supported.
 - Bubblewrap is the default filesystem sandbox pipeline.
-- If `/usr/bin/bwrap` is present, the helper uses it.
-- If `/usr/bin/bwrap` is missing, the helper falls back to the vendored
+- If `/usr/bin/bwrap` is present and supports `--argv0`, the helper uses it.
+- If `/usr/bin/bwrap` is missing or does not support `--argv0`, the helper falls back to the vendored
   bubblewrap path.
 - If `/usr/bin/bwrap` is missing, Codex also surfaces a startup warning instead
   of printing directly from the sandbox helper.
