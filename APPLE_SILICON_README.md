@@ -1,6 +1,7 @@
 # Apple Silicon Native Build
 
-This guide is for building and running Codex natively on an Apple Silicon Mac.
+This guide is for building and running `codex` and `codex-exec` natively on an
+Apple Silicon Mac.
 
 It assumes:
 
@@ -29,26 +30,34 @@ Install the helper used by this repo:
 cargo install --locked just
 ```
 
+Useful optional helpers:
+
+```bash
+cargo install --locked cargo-nextest
+cargo install --locked cargo-insta
+```
+
 ## Build
 
 From the repository root:
 
 ```bash
 cd codex-rs
-cargo build -p codex-cli --release
+cargo build -p codex-cli -p codex-exec --release
 ```
 
-The binary will be at:
+The binaries will be at:
 
 ```bash
 codex-rs/target/release/codex
+codex-rs/target/release/codex-exec
 ```
 
 If you want a debug build instead:
 
 ```bash
 cd codex-rs
-cargo build -p codex-cli
+cargo build -p codex-cli -p codex-exec
 ```
 
 ## Run
@@ -58,6 +67,7 @@ From `codex-rs`:
 ```bash
 ./target/release/codex --help
 ./target/release/codex
+./target/release/codex-exec --help
 ```
 
 Run a one-off command:
@@ -66,10 +76,17 @@ Run a one-off command:
 ./target/release/codex exec "print the current working directory"
 ```
 
+Run `codex-exec` directly:
+
+```bash
+./target/release/codex-exec --help
+```
+
 Use the debug binary while iterating:
 
 ```bash
 ./target/debug/codex
+./target/debug/codex-exec
 ```
 
 ## Flex Tier
@@ -95,4 +112,11 @@ Run a targeted CLI test:
 ```bash
 cd codex-rs
 cargo test -p codex-cli
+```
+
+Run a targeted `codex-exec` test:
+
+```bash
+cd codex-rs
+cargo test -p codex-exec
 ```
